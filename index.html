@@ -150,6 +150,15 @@ main h5{font-size:.98rem;margin:.9em 0 .2em;color:var(--navy)}
 .rag.green{border-color:#1F5C36;background:#2E8B57}
 .pills a[aria-current=page] .rag,.pills a[aria-current=page] .rag.red,.pills a[aria-current=page] .rag.amber,.pills a[aria-current=page] .rag.green{border-color:var(--cream-on-navy)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+nav.side a.acctlink{flex-direction:column;align-items:flex-start;gap:2px}
+.acctline{font-size:.75rem;font-weight:400;opacity:.85} 
+.acctline[data-state=error]{color:var(--bad);font-weight:700}
+nav.side a[aria-current=page] .acctline{color:var(--cream-on-navy)}
+.keybig{font-family:"Courier New",monospace;font-size:1.7rem;font-weight:700;letter-spacing:.08em;margin:6px 0;word-break:break-all;color:var(--navy)}
+.chk{display:flex;gap:10px;align-items:center;margin:10px 0;font-weight:700}
+.chk input{width:22px;height:22px;accent-color:var(--navy)}
+.err{color:var(--bad);font-weight:700}
 .st.secure{border-color:var(--green);color:var(--green)} .st.getting{border-color:var(--brown);color:var(--brown)} .st.needs{border-color:var(--bad);color:var(--bad)}
 mark{background:var(--sub);color:var(--text);padding:0 2px;border-radius:3px}
 .muted{color:#3a3a3a;font-size:.9rem}
@@ -266,7 +275,78 @@ const plain=s=>String(s).replace(/\*/g,'');
 const KEY='psy-hub-v2';
 let S={revised:{},cards:{},quiz:{},essay:{},past:{},drafts:{},prefs:{fs:17,theme:'cream'}};
 try{ const raw=localStorage.getItem(KEY); if(raw){ const o=JSON.parse(raw); for(const k in S) if(o[k]) S[k]=Object.assign(S[k],o[k]); } }catch(e){}
-function save(){ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} try{ refreshRag(); }catch(e){} }
+function save(){ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} try{ refreshRag(); }catch(e){} try{ if(ACC.key) schedulePush(); }catch(e){} }
+
+/* ================= account sync (save key, no names or passwords) ================= */
+const AKEY='psy-hub-v2-acct';
+const ALPHA='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const SYNCK=['revised','cards','quiz','essay','past','drafts'];
+const ACC={key:null,rts:0,dirty:false,status:'off',err:'',timer:null};
+try{ const m=JSON.parse(localStorage.getItem(AKEY)||'null'); if(m&&m.key){ ACC.key=m.key; ACC.rts=m.rts||0; ACC.dirty=!!m.dirty; ACC.status='saved'; } }catch(e){}
+function persistMeta(){ try{ if(ACC.key) localStorage.setItem(AKEY,JSON.stringify({key:ACC.key,rts:ACC.rts,dirty:ACC.dirty})); else localStorage.removeItem(AKEY); }catch(e){} }
+function newKey(){ const b=new Uint8Array(16); crypto.getRandomValues(b); let k=''; for(const x of b) k+=ALPHA[x%32]; return k; }
+const normKey=k=>String(k||'').toUpperCase().replace(/[\s-]/g,'');
+const validKey=k=>k.length===16&&[...k].every(c=>ALPHA.includes(c));
+const showKey=k=>(k||'').match(/.{1,4}/g).join('-');
+async function api(method,body,key){
+  const r=await fetch('/api/progress',{method,headers:{'X-Save-Key':key||ACC.key,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,cache:'no-store'});
+  let j=null; try{ j=await r.json(); }catch(e){}
+  return {ok:r.ok,status:r.status,json:j||{}};
+}
+const snapshot=()=>{ const o={}; SYNCK.forEach(k=>o[k]=S[k]); return o; };
+const union=(a,b)=>{ const o={}; SYNCK.forEach(k=>o[k]=Object.assign({},(a&&a[k])||{},(b&&b[k])||{})); return o; };
+function adopt(d){ SYNCK.forEach(k=>{ S[k]=Object.assign({},(d&&d[k])||{}); }); try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} try{ refreshRag(); }catch(e){} }
+function acctText(){ return ({off:'Saved on this device only',saving:'Saving to your account...',saved:'Saved to your account',error:ACC.err||'Could not save to your account'})[ACC.status]||''; }
+function setStatus(st,err){ ACC.status=st; ACC.err=err||''; document.querySelectorAll('.acctline').forEach(e=>{ e.textContent=ACC.key?acctText():'Saved on this device only'; e.dataset.state=ACC.key?st:'off'; }); }
+function schedulePush(){ ACC.dirty=true; persistMeta(); setStatus('saving'); clearTimeout(ACC.timer); ACC.timer=setTimeout(push,1500); }
+async function push(){
+  if(!ACC.key) return;
+  try{
+    const r=await api('PUT',{data:snapshot()});
+    if(r.ok){ ACC.rts=r.json.updated; ACC.dirty=false; persistMeta(); setStatus('saved'); }
+    else if(r.status===404) setStatus('error','This key was not found on the server. Check it on the Save my progress page.');
+    else setStatus('error','Could not save. It will try again on your next change.');
+  }catch(e){ setStatus('error','Offline. Saved on this device and will sync later.'); }
+}
+async function pull(){
+  if(!ACC.key) return;
+  if(ACC.dirty){ push(); return; }
+  try{
+    const r=await api('GET');
+    if(r.ok){ if(r.json.updated>ACC.rts){ adopt(r.json.data); ACC.rts=r.json.updated; persistMeta(); render(); } setStatus('saved'); }
+    else if(r.status===404) setStatus('error','This key was not found on the server.');
+    else setStatus('error','Could not reach your account.');
+  }catch(e){ setStatus('error','Offline. Saved on this device only for now.'); }
+}
+async function createAccount(){
+  for(let i=0;i<3;i++){
+    const k=newKey(); let r;
+    try{ r=await api('POST',null,k); }catch(e){ return {err:'The save service could not be reached. Your progress is still saved on this device.'}; }
+    if(r.status===503) return {err:'Accounts are not switched on for this site yet. Your progress is still saved on this device.'};
+    if(r.status===409) continue;
+    if(!r.ok) return {err:'Could not create the account. Please try again.'};
+    ACC.key=k; ACC.rts=0; ACC.dirty=true; persistMeta(); setStatus('saving'); await push();
+    return {key:k};
+  }
+  return {err:'Could not create a key. Please try again.'};
+}
+async function signIn(raw){
+  const k=normKey(raw);
+  if(!validKey(k)) return {err:'That is not the right shape. A key has 16 letters and numbers, like K7QM-X2PD-9WTR-HC4F.'};
+  let r; try{ r=await api('GET',null,k); }catch(e){ return {err:'The save service could not be reached. Try again in a moment.'}; }
+  if(r.status===503) return {err:'Accounts are not switched on for this site yet.'};
+  if(r.status===404) return {err:'No account found for that key. Check each letter and number.'};
+  if(!r.ok) return {err:'Could not sign in. Please try again.'};
+  adopt(union(r.json.data,snapshot()));
+  ACC.key=k; ACC.rts=r.json.updated||0; ACC.dirty=true; persistMeta(); setStatus('saving'); await push();
+  return {ok:true};
+}
+function signOut(){ clearTimeout(ACC.timer); ACC.key=null; ACC.dirty=false; persistMeta(); S={revised:{},cards:{},quiz:{},essay:{},past:{},drafts:{},prefs:S.prefs}; try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} setStatus('off'); }
+async function deleteAccount(){
+  try{ const r=await api('DELETE'); if(!r.ok) return false; }catch(e){ return false; }
+  clearTimeout(ACC.timer); ACC.key=null; ACC.dirty=false; persistMeta(); setStatus('off'); return true;
+}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') pull(); });
 
 /* ================= data ================= */
 const YEARS=[
@@ -328,6 +408,7 @@ function parse(){
   const p=ROUTE.split('/').map(x=>{try{return decodeURIComponent(x)}catch(e){return x}});
   if(p[0]==='t'&&TOPICS[p[1]]){ const t=TOPICS[p[1]]; return {view:'topic',tid:p[1],tab:tabsFor(t).some(x=>x[0]===p[2])?p[2]:'learn',sub:p[3]||'',extra:p[4]||''}; }
   if(p[0]==='progress') return {view:'progress'};
+  if(p[0]==='account') return {view:'account'};
   if(p[0]==='glossary') return {view:'glossary'};
   if(p[0]==='search') return {view:'search',q:p.slice(1).join('/')};
   return {view:'home'};
@@ -336,7 +417,7 @@ function render(){
   cur=parse();
   drawSide();
   main.replaceChildren();
-  ({home:homeV,topic:topicV,progress:progressV,glossary:glossaryV,search:searchV})[cur.view]();
+  ({home:homeV,topic:topicV,progress:progressV,account:accountV,glossary:glossaryV,search:searchV})[cur.view]();
   if(cur.view!=='search'){ const h1=$('h1',main); if(h1){h1.setAttribute('tabindex','-1'); h1.focus({preventScroll:true});} window.scrollTo(0,0); }
   side.classList.remove('open'); $('#menuBtn').setAttribute('aria-expanded','false');
 }
@@ -348,6 +429,7 @@ function drawSide(){
     h('ul',null,
       h('li',null,h('a',{href:'#/home','aria-current':cur.view==='home'?'page':null},'Home')),
       h('li',null,h('a',{href:'#/progress','aria-current':cur.view==='progress'?'page':null},'My progress')),
+      h('li',null,h('a',{href:'#/account','aria-current':cur.view==='account'?'page':null,class:'acctlink'},h('span',null,'Save my progress'),h('small',{class:'acctline','data-state':ACC.key?ACC.status:'off'},ACC.key?acctText():'Saved on this device only'))),
       h('li',null,h('a',{href:'#/glossary','aria-current':cur.view==='glossary'?'page':null},'Glossary'))),
     YEARS.map(y=>[h('h2',null,y.name),h('ul',null,y.items.map(([id,name])=>
       TOPICS[id]? h('li',null,h('a',{href:`#/t/${id}/learn`,'aria-current':(cur.view==='topic'&&cur.tid===id)?'page':null},(()=>{const r=topicRag(TOPICS[id]);return [h('span',{class:'rag '+r.c,'aria-hidden':'true'}),h('span',{class:'sr'},r.word+': ')];})(),name))
@@ -655,10 +737,70 @@ function drawPast(t){
   fill(pp,out);
 }
 
+/* ================= account page ================= */
+const ACV={just:null,msg:'',reveal:false,out:0,del:0,busy:false,saved:false};
+function copyText(t,btn){
+  const ok=()=>{ const o=btn.textContent; btn.textContent='Copied'; setTimeout(()=>{btn.textContent=o;},1500); };
+  try{ navigator.clipboard.writeText(t).then(ok,()=>{btn.textContent='Select the key and copy it by hand';}); }catch(e){ btn.textContent='Select the key and copy it by hand'; }
+}
+function downloadKey(k){
+  try{
+    const txt='Psychology Revision Hub save key\n\n'+showKey(k)+'\n\nKeep this safe. It is the only way to get your progress back on another device. It cannot be reset if it is lost.\n';
+    const a=h('a',{href:URL.createObjectURL(new Blob([txt],{type:'text/plain'})),download:'revision-hub-save-key.txt'}); document.body.append(a); a.click(); a.remove();
+  }catch(e){}
+}
+function accountV(){
+  add(main,h('h1',null,'Save my progress'));
+  if(ACV.just){
+    const k=ACV.just; const cb=h('input',{type:'checkbox',id:'savedBox'}); const done=h('button',{class:'btn',disabled:true,onclick:()=>{ACV.just=null;ACV.saved=false;render();}},'Done');
+    cb.addEventListener('change',()=>{done.disabled=!cb.checked;});
+    const copyBtn=h('button',{class:'btn alt',onclick:()=>copyText(showKey(k),copyBtn)},'Copy key');
+    add(main,
+      h('div',{class:'notice'},h('b',null,'Your account is ready. '),'Your progress is now saving to it.'),
+      h('div',{class:'card def'},h('h4',null,'Your save key'),h('p',{class:'keybig',id:'theKey'},showKey(k))),
+      h('p',null,h('b',null,'Save this key now. '),'Take a screenshot, write it down or put it in your notes. It is the only way to get your progress back on another device, and it cannot be reset if you lose it.'),
+      h('div',{class:'btns'},copyBtn,h('button',{class:'btn alt',onclick:()=>downloadKey(k)},'Download as a text file')),
+      h('label',{class:'chk'},cb,' I have saved my key somewhere safe'),
+      h('div',{class:'btns'},done));
+    return;
+  }
+  if(ACC.key){
+    const keyBox=h('p',{class:'keybig',id:'theKey'},ACV.reveal?showKey(ACC.key):'Hidden');
+    const out=h('button',{class:'btn alt',onclick:()=>{ if(ACV.out===0){ACV.out=1;out.textContent='Tap again to sign out and clear this device';} else {ACV.out=0;signOut();ACV.reveal=false;render();} }},'Sign out of this device');
+    const del=h('button',{class:'btn alt',onclick:async()=>{ if(ACV.del===0){ACV.del=1;del.textContent='Tap again to delete my account';} else { ACV.del=0; const ok=await deleteAccount(); ACV.msg=ok?'Your account was deleted. Your progress is still on this device.':'Could not delete the account. Try again.'; render(); } }},'Delete my account');
+    const rev=h('button',{class:'btn alt',onclick:()=>{ACV.reveal=!ACV.reveal;render();}},ACV.reveal?'Hide my key':'Show my key');
+    add(main,
+      ACV.msg?h('div',{class:'notice'},ACV.msg):null,
+      h('div',{class:'card def'},h('h4',null,'You are signed in'),h('p',{class:'acctline','data-state':ACC.status},acctText()),h('p',null,'Your progress saves automatically after every change, and loads on any device where you sign in with your key.')),
+      h('div',{class:'card'},h('h4',null,'Your save key'),keyBox,h('div',{class:'btns'},rev,ACV.reveal?(()=>{const b=h('button',{class:'btn alt',onclick:()=>copyText(showKey(ACC.key),b)},'Copy key');return b;})():null)),
+      h('div',{class:'card'},h('h4',null,'Using a shared or school computer?'),h('p',null,'Sign out when you finish. This removes your progress from this device (it stays safe in your account) so the next person does not see it.'),h('div',{class:'btns'},out)),
+      h('div',{class:'card'},h('h4',null,'Delete my account'),h('p',null,'This removes your saved progress from the server for good. Your progress stays on this device.'),h('div',{class:'btns'},del)));
+    ACV.msg='';
+    return;
+  }
+  const input=h('input',{type:'text',id:'keyIn',autocomplete:'off',autocapitalize:'characters',spellcheck:'false',placeholder:'K7QM-X2PD-9WTR-HC4F','aria-label':'Your save key'});
+  const err=h('p',{class:'err',role:'alert'},ACV.msg);
+  const create=h('button',{class:'btn',onclick:async()=>{ if(ACV.busy) return; ACV.busy=true; create.disabled=true; create.textContent='Creating...'; const r=await createAccount(); ACV.busy=false; if(r.key){ACV.just=r.key;ACV.msg='';render();} else {ACV.msg=r.err; render();} }},'Create my save key');
+  const sign=h('button',{class:'btn alt',onclick:async()=>{ if(ACV.busy) return; ACV.busy=true; sign.disabled=true; const r=await signIn(input.value); ACV.busy=false; if(r.ok){ACV.msg='';render();} else {ACV.msg=r.err; render();} }},'Sign in with my key');
+  input.addEventListener('keydown',e=>{ if(e.key==='Enter') sign.click(); });
+  add(main,
+    h('p',null,'Your progress is saved on this device. To keep it safe and use it on your phone, laptop and school computer, create a save key.'),
+    h('div',{class:'card def'},h('h4',null,'How it works'),h('ul',null,
+      h('li',null,'The site gives you a key made of 16 letters and numbers, like K7QM-X2PD-9WTR-HC4F.'),
+      h('li',null,'You save the key. Typing it on any device loads your progress.'),
+      h('li',null,'There is no name, email or password to enter or remember.'),
+      h('li',null,'If you lose the key, it cannot be reset. Save it somewhere you will find it again.'),
+      h('li',null,'Only your revision progress is stored: which sections you revised, flashcards, quiz answers and essay ticks.'))),
+    ACV.msg&&!ACC.key?h('div',{class:'notice'},ACV.msg):null,
+    h('div',{class:'card'},h('h4',null,'New here?'),h('div',{class:'btns'},create)),
+    h('div',{class:'card'},h('h4',null,'Already have a key?'),h('label',{for:'keyIn'},'Type or paste it here'),h('div',{class:'ctrl'},input),h('div',{class:'btns'},sign)));
+  ACV.msg='';
+}
+
 /* ================= progress ================= */
 let resetStage=0;
 function progressV(){
-  add(main,h('h1',null,'My progress'),h('p',null,'Saved in this browser on this device. Labels: under 50% Needs work, 50 to 74% Getting there, 75% and above Secure.'),h('p',null,h('b',null,'Status: '),h('span',{class:'rag red','aria-hidden':'true'}),'Not started, ',h('span',{class:'rag amber','aria-hidden':'true'}),'In progress, ',h('span',{class:'rag green','aria-hidden':'true'}),'Complete. A section is complete when you have marked it revised, known every flashcard, answered every quiz question and saved an essay result (where the section has them).'));
+  add(main,h('h1',null,'My progress'),h('p',null,ACC.key?'Saved to your account and on this device. ':['Saved in this browser on this device only. ',h('a',{href:'#/account'},'Save it to an account'),' to keep it safe and use it on other devices. '],'Labels: under 50% Needs work, 50 to 74% Getting there, 75% and above Secure.'),h('p',null,h('b',null,'Status: '),h('span',{class:'rag red','aria-hidden':'true'}),'Not started, ',h('span',{class:'rag amber','aria-hidden':'true'}),'In progress, ',h('span',{class:'rag green','aria-hidden':'true'}),'Complete. A section is complete when you have marked it revised, known every flashcard, answered every quiz question and saved an essay result (where the section has them).'));
   Object.values(TOPICS).forEach(t=>{
     const hasPlan=t.units.some(u=>u.plan);
     add(main,h('h2',null,t.name));
@@ -735,7 +877,7 @@ $('#fsUp').onclick=()=>{const i=SIZES.indexOf(S.prefs.fs);S.prefs.fs=SIZES[Math.
 $('#fsDown').onclick=()=>{const i=SIZES.indexOf(S.prefs.fs);S.prefs.fs=SIZES[Math.max(0,(i<0?1:i)-1)];save();applyPrefs();};
 $('#theme').onchange=e=>{S.prefs.theme=e.target.value;save();applyPrefs();};
 $('#menuBtn').onclick=()=>{const o=side.classList.toggle('open');$('#menuBtn').setAttribute('aria-expanded',o);};
-applyPrefs(); render();
+applyPrefs(); render(); if(ACC.key) pull();
 </script>
 </body>
 </html>
