@@ -38,6 +38,7 @@ nav.side h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;margi
 nav.side h2:first-child{margin-top:0}
 nav.side ul{list-style:none;margin:0;padding:0}
 nav.side a,nav.side span.soon{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:7px 10px;border-radius:8px;font-size:.92rem;text-decoration:none;color:var(--text);line-height:1.35}
+nav.side a{justify-content:flex-start;gap:0}
 nav.side a:hover{background:var(--bg)}
 nav.side a[aria-current=page]{background:var(--navy);color:var(--cream-on-navy);font-weight:700}
 nav.side span.soon{color:#4a4a4a}
@@ -142,6 +143,13 @@ main h5{font-size:.98rem;margin:.9em 0 .2em;color:var(--navy)}
 
 /* status */
 .st{display:inline-block;font-weight:700;font-size:.8rem;padding:1px 10px;border-radius:6px;border:2px solid var(--navy);background:var(--bg)}
+
+.rag{flex:none;display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid var(--navy);vertical-align:-2px;margin-right:7px;box-sizing:border-box;background:var(--bg)}
+.rag.red{border-color:#B03020}
+.rag.amber{border-color:#B07400;background:linear-gradient(90deg,#E39B00 50%,var(--bg) 50%)}
+.rag.green{border-color:#1F5C36;background:#2E8B57}
+.pills a[aria-current=page] .rag,.pills a[aria-current=page] .rag.red,.pills a[aria-current=page] .rag.amber,.pills a[aria-current=page] .rag.green{border-color:var(--cream-on-navy)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .st.secure{border-color:var(--green);color:var(--green)} .st.getting{border-color:var(--brown);color:var(--brown)} .st.needs{border-color:var(--bad);color:var(--bad)}
 mark{background:var(--sub);color:var(--text);padding:0 2px;border-radius:3px}
 .muted{color:#3a3a3a;font-size:.9rem}
@@ -218,8 +226,34 @@ function h(tag, attrs, ...kids){
 const $=(s,r=document)=>r.querySelector(s);
 function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function statusOf(p){ if(p>=75) return ['Secure','secure']; if(p>=50) return ['Getting there','getting']; return ['Needs work','needs']; }
-function stEl(p){const [t,c]=statusOf(p);return h('span',{class:'st '+c},t)}
+function stEl(p){const [t,c]=statusOf(p);return h('span',{class:'st '+c},`${t} (${p}%)`)}
 function pct(a,b){return b? Math.round(100*a/b):0}
+/* red / amber / green per section: revised, flashcards all known, quiz all answered, essay saved (where they exist) */
+function ragOf(t,u){
+  const qs=t.quiz.map((q,i)=>[q,i]).filter(([q])=>q.unit===u.id);
+  const att=qs.filter(([q,i])=>(t.id+':'+i) in S.quiz).length;
+  const deck=deckFor(t,u.id), kn=deck.filter(c=>S.cards[c.key]).length;
+  const parts=[['Revised',!!S.revised[t.id+':'+u.id],!!S.revised[t.id+':'+u.id]]];
+  if(deck.length) parts.push(['Flashcards',kn===deck.length,kn>0]);
+  if(qs.length) parts.push(['Quiz',att===qs.length,att>0]);
+  if(u.plan) parts.push(['Essay',!!S.essay[t.id+':'+u.id],!!S.essay[t.id+':'+u.id]]);
+  const done=parts.filter(x=>x[1]).length, started=parts.some(x=>x[2]);
+  const c=done===parts.length?'green':started?'amber':'red';
+  const word={green:'Complete',amber:'In progress',red:'Not started'}[c];
+  return {c,done,total:parts.length,parts,word,text:`${word}: ${done} of ${parts.length} done`};
+}
+function ragEl(t,u){
+  const r=ragOf(t,u);
+  return h('span',{class:'ragwrap','data-rt':t.id,'data-ru':u.id},h('span',{class:'rag '+r.c,'aria-hidden':'true'}),h('span',{class:'sr'},r.text+'. '));
+}
+function topicRag(t){
+  const rs=t.units.map(u=>ragOf(t,u).c);
+  const c=rs.every(x=>x==='green')?'green':rs.every(x=>x==='red')?'red':'amber';
+  return {c,word:{green:'Complete',amber:'In progress',red:'Not started'}[c]};
+}
+function refreshRag(){
+  document.querySelectorAll('.ragwrap[data-ru]').forEach(el=>{ const t=TOPICS[el.dataset.rt]; const u=t&&t.units.find(x=>x.id===el.dataset.ru); if(u) el.replaceWith(ragEl(t,u)); });
+}
 function inline(text){
   const out=[]; const re=/\*\*(.+?)\*\*|\*([^*\s][^*]*?)\*/g; let i=0,m;
   while((m=re.exec(text))){ if(m.index>i) out.push(text.slice(i,m.index)); out.push(m[1]!==undefined? h('b',null,m[1]) : h('span',{class:'em'},m[2])); i=re.lastIndex; }
@@ -232,7 +266,7 @@ const plain=s=>String(s).replace(/\*/g,'');
 const KEY='psy-hub-v2';
 let S={revised:{},cards:{},quiz:{},essay:{},past:{},drafts:{},prefs:{fs:17,theme:'cream'}};
 try{ const raw=localStorage.getItem(KEY); if(raw){ const o=JSON.parse(raw); for(const k in S) if(o[k]) S[k]=Object.assign(S[k],o[k]); } }catch(e){}
-function save(){ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} }
+function save(){ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} try{ refreshRag(); }catch(e){} }
 
 /* ================= data ================= */
 const YEARS=[
@@ -316,7 +350,7 @@ function drawSide(){
       h('li',null,h('a',{href:'#/progress','aria-current':cur.view==='progress'?'page':null},'My progress')),
       h('li',null,h('a',{href:'#/glossary','aria-current':cur.view==='glossary'?'page':null},'Glossary'))),
     YEARS.map(y=>[h('h2',null,y.name),h('ul',null,y.items.map(([id,name])=>
-      TOPICS[id]? h('li',null,h('a',{href:`#/t/${id}/learn`,'aria-current':(cur.view==='topic'&&cur.tid===id)?'page':null},name))
+      TOPICS[id]? h('li',null,h('a',{href:`#/t/${id}/learn`,'aria-current':(cur.view==='topic'&&cur.tid===id)?'page':null},(()=>{const r=topicRag(TOPICS[id]);return [h('span',{class:'rag '+r.c,'aria-hidden':'true'}),h('span',{class:'sr'},r.word+': ')];})(),name))
                : h('li',null,h('span',{class:'soon'},name,h('span',{class:'tag'},'Coming soon')))))]));
 }
 
@@ -349,7 +383,7 @@ function homeV(){
     h('p',null,'Everything for AQA A-level Psychology in one place. Pick a topic, then use the tabs: Learn, Evaluate, Practice and Key terms. Some topics also have Essay plans.'),
     h('div',{class:'notice'},h('b',null,'Draft. '),'Nine topics are loaded from teacher transcripts that have not been confirmed yet. Issues and Debates, Relationships and Aggression are still to come. There is no Apply (AO2) tab yet. Social Influence has no conformity lessons yet.'),
     YEARS.map(y=>[h('h2',null,y.name),h('div',{class:'grid'},y.items.map(([id,name])=>
-      TOPICS[id]? h('a',{class:'tcard ready',href:`#/t/${id}/learn`},h('b',null,name),h('span',{class:'muted'},`${TOPICS[id].units.length} ${TOPICS[id].fmt==='deck'?'lessons':'sections'}, ${TOPICS[id].quiz.length} quiz questions`))
+      TOPICS[id]? h('a',{class:'tcard ready',href:`#/t/${id}/learn`},h('b',null,(()=>{const r=topicRag(TOPICS[id]);return [h('span',{class:'rag '+r.c,'aria-hidden':'true'}),h('span',{class:'sr'},r.word+': ')];})(),name),h('span',{class:'muted'},`${TOPICS[id].units.length} ${TOPICS[id].fmt==='deck'?'lessons':'sections'}, ${TOPICS[id].quiz.length} quiz questions`))
                : h('div',{class:'tcard'},h('b',null,name),h('span',{class:'muted'},'Coming soon'))))]),
     h('div',{class:'btns'},h('a',{class:'btn alt',href:'#/progress'},'See my progress')));
 }
@@ -367,7 +401,7 @@ function topicV(){
     let list=t.units;
     if(cur.tab==='plans') list=t.units.filter(u=>u.plan);
     U=list.find(u=>u.id===cur.sub)||list[0];
-    add(main,h('nav',{class:'pills','aria-label':t.fmt==='deck'?'Lessons':'Sections'},list.map(u=>h('a',{href:`#/t/${t.id}/${cur.tab}/${u.id}`,'aria-current':u.id===U.id?'page':null},u.label))));
+    add(main,h('nav',{class:'pills','aria-label':t.fmt==='deck'?'Lessons':'Sections'},list.map(u=>h('a',{href:`#/t/${t.id}/${cur.tab}/${u.id}`,'aria-current':u.id===U.id?'page':null},ragEl(t,u),u.label))));
   }
   ({learn:learnV,evaluate:evalV,plans:plansV,terms:termsV,practice:practiceV})[cur.tab](t,U);
 }
@@ -624,7 +658,7 @@ function drawPast(t){
 /* ================= progress ================= */
 let resetStage=0;
 function progressV(){
-  add(main,h('h1',null,'My progress'),h('p',null,'Saved in this browser on this device. Labels: under 50% Needs work, 50 to 74% Getting there, 75% and above Secure.'));
+  add(main,h('h1',null,'My progress'),h('p',null,'Saved in this browser on this device. Labels: under 50% Needs work, 50 to 74% Getting there, 75% and above Secure.'),h('p',null,h('b',null,'Status: '),h('span',{class:'rag red','aria-hidden':'true'}),'Not started, ',h('span',{class:'rag amber','aria-hidden':'true'}),'In progress, ',h('span',{class:'rag green','aria-hidden':'true'}),'Complete. A section is complete when you have marked it revised, known every flashcard, answered every quiz question and saved an essay result (where the section has them).'));
   Object.values(TOPICS).forEach(t=>{
     const hasPlan=t.units.some(u=>u.plan);
     add(main,h('h2',null,t.name));
@@ -634,12 +668,13 @@ function progressV(){
       const es=S.essay[t.id+':'+u.id];
       return h('tr',null,
         h('th',{scope:'row',class:'rowh'},h('a',{href:`#/t/${t.id}/learn/${u.id}`},u.label)),
+        h('td',null,(()=>{const r=ragOf(t,u);return [h('span',{class:'rag '+r.c,'aria-hidden':'true'}),`${r.word} (${r.done} of ${r.total})`];})()),
         h('td',null,S.revised[t.id+':'+u.id]?'Yes':'Not yet'),
         h('td',null,`${kn} of ${deck.length}`),
         h('td',null,att.length?[`${ok} of ${att.length} `,stEl(pct(ok,att.length))]:(qs.length?'Not tried':'-')),
         hasPlan?h('td',null,u.plan?(es?`AO1 ${es.ao1}/${es.ao1max}, AO3 ${es.ao3}/${es.ao3max}`:'Not tried'):'-'):null);
     });
-    add(main,h('div',{class:'tablewrap'},h('table',null,h('thead',null,h('tr',null,['Section','Revised','Flashcards known','Quiz (answered)'].concat(hasPlan?['Essay points covered']:[]).map(x=>h('th',{scope:'col'},x)))),h('tbody',null,rows))));
+    add(main,h('div',{class:'tablewrap'},h('table',null,h('thead',null,h('tr',null,['Section','Status','Revised','Flashcards known','Quiz (answered)'].concat(hasPlan?['Essay points covered']:[]).map(x=>h('th',{scope:'col'},x)))),h('tbody',null,rows))));
     if(t.past.length){
       add(main,h('h3',null,'Past paper'));
       add(main,h('div',{class:'tablewrap'},h('table',null,h('thead',null,h('tr',null,['Question','Mark','Status'].map(x=>h('th',{scope:'col'},x)))),h('tbody',null,t.past.map(q=>{const r=S.past[t.id+':'+q.id];return h('tr',null,h('td',null,`Q${q.label} ${q.sub}`),h('td',null,r?`${r.score} out of ${r.max}`:'Not tried'),h('td',null,r?stEl(pct(r.score,r.max)):'-'));})))));
