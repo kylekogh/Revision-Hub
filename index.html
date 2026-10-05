@@ -463,7 +463,6 @@ function homeV(){
   add(main,
     h('h1',null,'Psychology Revision Hub'),
     h('p',null,'Everything for AQA A-level Psychology in one place. Pick a topic, then use the tabs: Learn, Evaluate, Practice and Key terms. Some topics also have Essay plans.'),
-    h('div',{class:'notice'},h('b',null,'Draft. '),'Nine topics are loaded from teacher transcripts that have not been confirmed yet. Issues and Debates, Relationships and Aggression are still to come. There is no Apply (AO2) tab yet. Social Influence has no conformity lessons yet.'),
     YEARS.map(y=>[h('h2',null,y.name),h('div',{class:'grid'},y.items.map(([id,name])=>
       TOPICS[id]? h('a',{class:'tcard ready',href:`#/t/${id}/learn`},h('b',null,(()=>{const r=topicRag(TOPICS[id]);return [h('span',{class:'rag '+r.c,'aria-hidden':'true'}),h('span',{class:'sr'},r.word+': ')];})(),name),h('span',{class:'muted'},`${TOPICS[id].units.length} ${TOPICS[id].fmt==='deck'?'lessons':'sections'}, ${TOPICS[id].quiz.length} quiz questions`))
                : h('div',{class:'tcard'},h('b',null,name),h('span',{class:'muted'},'Coming soon'))))]),
