@@ -410,6 +410,7 @@ function parse(){
   if(p[0]==='progress') return {view:'progress'};
   if(p[0]==='account') return {view:'account'};
   if(p[0]==='glossary') return {view:'glossary'};
+  if(p[0]==='resources') return {view:'resources'};
   if(p[0]==='search') return {view:'search',q:p.slice(1).join('/')};
   return {view:'home'};
 }
@@ -417,7 +418,7 @@ function render(){
   cur=parse();
   drawSide();
   main.replaceChildren();
-  ({home:homeV,topic:topicV,progress:progressV,account:accountV,glossary:glossaryV,search:searchV})[cur.view]();
+  ({home:homeV,topic:topicV,progress:progressV,account:accountV,glossary:glossaryV,resources:resourcesV,search:searchV})[cur.view]();
   if(cur.view!=='search'){ const h1=$('h1',main); if(h1){h1.setAttribute('tabindex','-1'); h1.focus({preventScroll:true});} window.scrollTo(0,0); }
   side.classList.remove('open'); $('#menuBtn').setAttribute('aria-expanded','false');
 }
@@ -430,7 +431,8 @@ function drawSide(){
       h('li',null,h('a',{href:'#/home','aria-current':cur.view==='home'?'page':null},'Home')),
       h('li',null,h('a',{href:'#/progress','aria-current':cur.view==='progress'?'page':null},'My progress')),
       h('li',null,h('a',{href:'#/account','aria-current':cur.view==='account'?'page':null,class:'acctlink'},h('span',null,'Save my progress'),h('small',{class:'acctline','data-state':ACC.key?ACC.status:'off'},ACC.key?acctText():'Saved on this device only'))),
-      h('li',null,h('a',{href:'#/glossary','aria-current':cur.view==='glossary'?'page':null},'Glossary'))),
+      h('li',null,h('a',{href:'#/glossary','aria-current':cur.view==='glossary'?'page':null},'Glossary')),
+      h('li',null,h('a',{href:'#/resources','aria-current':cur.view==='resources'?'page':null},'Other useful resources'))),
     YEARS.map(y=>[h('h2',null,y.name),h('ul',null,y.items.map(([id,name])=>
       TOPICS[id]? h('li',null,h('a',{href:`#/t/${id}/learn`,'aria-current':(cur.view==='topic'&&cur.tid===id)?'page':null},(()=>{const r=topicRag(TOPICS[id]);return [h('span',{class:'rag '+r.c,'aria-hidden':'true'}),h('span',{class:'sr'},r.word+': ')];})(),name))
                : h('li',null,h('span',{class:'soon'},name,h('span',{class:'tag'},'Coming soon')))))]));
@@ -843,6 +845,23 @@ function glossaryV(){
   }
   add(main,h('h1',null,'Glossary'),h('p',null,'Where a term is defined more than once, each wording is shown with the place it comes from.'),h('div',{class:'ctrl'},filt),count,list);
   draw();
+}
+
+/* ================= other useful resources ================= */
+const RESOURCES=[
+ {group:'Games and quizzes by Mr Hamilton',items:[
+  ['Mr Hamilton on Gimkit','Live quiz games for revision.','https://www.gimkit.com/profile/6abbc7b22b36b0c6ca987c45'],
+  ['Mr Hamilton on Blooket','Revision games and question sets.','https://dashboard.blooket.com/user/kgeorgehamilton']]},
+ {group:'Notes and reading',items:[
+  ['Simply Psychology','Study guides for psychology students.','https://www.simplypsychology.org/'],
+  ['tutor2u Psychology','Study notes, videos and interactive activities.','https://www.tutor2u.net/psychology/reference'],
+  ['Psychology Today UK','Articles on psychology in everyday life.','https://www.psychologytoday.com/gb']]},
+ {group:'Exam practice',items:[
+  ['tutor2u AQA A-Level Topic Tracker','Track AQA A-Level Psychology exam questions from 2017 to 2025 and rate your confidence.','https://sims.tutor2u.net/psychology/alevel/topictracker']]}
+];
+function resourcesV(){
+  add(main,h('h1',null,'Other useful resources'),h('p',null,'These links open in a new tab.'));
+  RESOURCES.forEach(g=>add(main,h('h2',null,g.group),...g.items.map(([n,d,u])=>h('div',{class:'card'},h('h3',null,h('a',{href:u,target:'_blank',rel:'noopener noreferrer'},n,h('span',{class:'sr'},' (opens in a new tab)'))),h('p',null,d)))));
 }
 
 /* ================= search ================= */
