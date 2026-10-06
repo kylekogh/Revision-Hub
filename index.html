@@ -152,6 +152,12 @@ main h5{font-size:.98rem;margin:.9em 0 .2em;color:var(--navy)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 nav.side a.acctlink{flex-direction:column;align-items:flex-start;gap:2px}
+.overall{padding:.6rem .75rem;margin:.25rem 0 .75rem;background:var(--card);border:2px solid var(--border);border-radius:10px;font-size:.9rem}
+.overall .ovtop{display:flex;justify-content:space-between;margin-bottom:.35rem}
+.overall .ovbar{height:14px;border-radius:7px;background:#fff8e7;border:2px solid var(--border);overflow:hidden}
+.overall .ovfill{height:100%;background:var(--green);transition:width .4s ease}
+.overall small{display:block;margin-top:.35rem;font-size:.78rem}
+@media (prefers-reduced-motion:reduce){.overall .ovfill{transition:none}}
 .acctline{font-size:.75rem;font-weight:400;opacity:.85} 
 .acctline[data-state=error]{color:var(--bad);font-weight:700}
 nav.side a[aria-current=page] .acctline{color:var(--cream-on-navy)}
@@ -260,7 +266,20 @@ function topicRag(t){
   const c=rs.every(x=>x==='green')?'green':rs.every(x=>x==='red')?'red':'amber';
   return {c,word:{green:'Complete',amber:'In progress',red:'Not started'}[c]};
 }
+function overall(){
+  let done=0,total=0,td=0,tt=0;
+  Object.values(TOPICS).forEach(t=>{ tt++; let all=true; t.units.forEach(u=>{ total++; if(ragOf(t,u).c==='green') done++; else all=false; }); if(all&&t.units.length) td++; });
+  return {done,total,td,tt,p:total?Math.round(100*done/total):0};
+}
+function overallEl(){
+  const o=overall();
+  return h('div',{class:'overall','data-overall':'1'},
+    h('div',{class:'ovtop'},h('b',null,'Overall progress'),h('span',null,o.p+'%')),
+    h('div',{class:'ovbar',role:'progressbar','aria-label':'Overall progress','aria-valuemin':'0','aria-valuemax':'100','aria-valuenow':String(o.p),'aria-valuetext':`${o.p} percent, ${o.done} of ${o.total} sections complete`},h('div',{class:'ovfill',style:'width:'+o.p+'%'})),
+    h('small',null,`${o.done} of ${o.total} sections complete, ${o.td} of ${o.tt} topics`));
+}
 function refreshRag(){
+  document.querySelectorAll('[data-overall]').forEach(el=>el.replaceWith(overallEl()));
   document.querySelectorAll('.ragwrap[data-ru]').forEach(el=>{ const t=TOPICS[el.dataset.rt]; const u=t&&t.units.find(x=>x.id===el.dataset.ru); if(u) el.replaceWith(ragEl(t,u)); });
 }
 function inline(text){
@@ -427,6 +446,7 @@ window.addEventListener('popstate',fromHash);
 
 function drawSide(){
   fill(side,
+    overallEl(),
     h('ul',null,
       h('li',null,h('a',{href:'#/home','aria-current':cur.view==='home'?'page':null},'Home')),
       h('li',null,h('a',{href:'#/progress','aria-current':cur.view==='progress'?'page':null},'My progress')),
@@ -465,6 +485,7 @@ function homeV(){
   add(main,
     h('h1',null,'Psychology Revision Hub'),
     h('p',null,'Everything for AQA A-level Psychology in one place. Pick a topic, then use the tabs: Learn, Evaluate, Practice and Key terms. Some topics also have Essay plans.'),
+    overallEl(),
     YEARS.map(y=>[h('h2',null,y.name),h('div',{class:'grid'},y.items.map(([id,name])=>
       TOPICS[id]? h('a',{class:'tcard ready',href:`#/t/${id}/learn`},h('b',null,(()=>{const r=topicRag(TOPICS[id]);return [h('span',{class:'rag '+r.c,'aria-hidden':'true'}),h('span',{class:'sr'},r.word+': ')];})(),name),h('span',{class:'muted'},`${TOPICS[id].units.length} ${TOPICS[id].fmt==='deck'?'lessons':'sections'}, ${TOPICS[id].quiz.length} quiz questions`))
                : h('div',{class:'tcard'},h('b',null,name),h('span',{class:'muted'},'Coming soon'))))]),
@@ -801,7 +822,7 @@ function accountV(){
 /* ================= progress ================= */
 let resetStage=0;
 function progressV(){
-  add(main,h('h1',null,'My progress'),h('p',null,ACC.key?'Saved to your account and on this device. ':['Saved in this browser on this device only. ',h('a',{href:'#/account'},'Save it to an account'),' to keep it safe and use it on other devices. '],'Labels: under 50% Needs work, 50 to 74% Getting there, 75% and above Secure.'),h('p',null,h('b',null,'Status: '),h('span',{class:'rag red','aria-hidden':'true'}),'Not started, ',h('span',{class:'rag amber','aria-hidden':'true'}),'In progress, ',h('span',{class:'rag green','aria-hidden':'true'}),'Complete. A section is complete when you have marked it revised, known every flashcard, answered every quiz question and saved an essay result (where the section has them).'));
+  add(main,h('h1',null,'My progress'),overallEl(),h('p',null,ACC.key?'Saved to your account and on this device. ':['Saved in this browser on this device only. ',h('a',{href:'#/account'},'Save it to an account'),' to keep it safe and use it on other devices. '],'Labels: under 50% Needs work, 50 to 74% Getting there, 75% and above Secure.'),h('p',null,h('b',null,'Status: '),h('span',{class:'rag red','aria-hidden':'true'}),'Not started, ',h('span',{class:'rag amber','aria-hidden':'true'}),'In progress, ',h('span',{class:'rag green','aria-hidden':'true'}),'Complete. A section is complete when you have marked it revised, known every flashcard, answered every quiz question and saved an essay result (where the section has them).'));
   Object.values(TOPICS).forEach(t=>{
     const hasPlan=t.units.some(u=>u.plan);
     add(main,h('h2',null,t.name));
