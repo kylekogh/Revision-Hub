@@ -246,7 +246,7 @@ function pct(a,b){return b? Math.round(100*a/b):0}
 /* red / amber / green per section: revised, flashcards all known, quiz all answered, essay saved (where they exist) */
 function ragOf(t,u){
   const qs=t.quiz.map((q,i)=>[q,i]).filter(([q])=>q.unit===u.id);
-  const att=qs.filter(([q,i])=>(t.id+':'+i) in S.quiz).length;
+  const att=qs.filter(([q,i])=>qk(t,i) in S.quiz).length;
   const deck=deckFor(t,u.id), kn=deck.filter(c=>S.cards[c.key]).length;
   const parts=[['Revised',!!S.revised[t.id+':'+u.id],!!S.revised[t.id+':'+u.id]]];
   if(deck.length) parts.push(['Flashcards',kn===deck.length,kn>0]);
@@ -294,6 +294,7 @@ const plain=s=>String(s).replace(/\*/g,'');
 const KEY='psy-hub-v2';
 let S={revised:{},cards:{},quiz:{},essay:{},past:{},drafts:{},prefs:{fs:17,theme:'cream'}};
 try{ const raw=localStorage.getItem(KEY); if(raw){ const o=JSON.parse(raw); for(const k in S) if(o[k]) S[k]=Object.assign(S[k],o[k]); } }catch(e){}
+try{ Object.keys(S.quiz).forEach(k=>{ if(/^[a-z0-9]+:\d+$/.test(k)) delete S.quiz[k]; }); }catch(e){}
 function save(){ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} try{ refreshRag(); }catch(e){} try{ if(ACC.key) schedulePush(); }catch(e){} }
 
 /* ================= account sync (save key, no names or passwords) ================= */
@@ -373,6 +374,9 @@ const YEARS=[
  {year:13,name:'Year 13',items:[['iad','Issues and Debates'],['rel','Relationships'],['sch','Schizophrenia'],['add','Addiction']]}
 ];
 const TOPICS={}; DATA.topics.forEach(t=>TOPICS[t.id]=t);
+function qhash(str){ let h=5381; for(let i=0;i<str.length;i++) h=((h<<5)+h+str.charCodeAt(i))|0; return (h>>>0).toString(36); }
+DATA.topics.forEach(t=>t.quiz.forEach(q=>{ q.k='q'+qhash(q.q); }));
+const qk=(t,i)=>t.id+':'+t.quiz[i].k;
 const ALLTABS=[['learn','Learn'],['evaluate','Evaluate'],['plans','Essay plans'],['practice','Practice'],['terms','Key terms']];
 function tabsFor(t){ return ALLTABS.filter(([id])=> id!=='plans' || t.units.some(u=>u.plan)); }
 function subsFor(t){
@@ -647,7 +651,7 @@ function drawQuiz(t){
   const opts=q.options.map((o,k)=>{
     const picked=r.picked!=null, isC=k===q.correct, isP=k===r.picked;
     return h('button',{class:'opt'+(picked&&isC?' correct':'')+(picked&&isP&&!isC?' wrong':''),disabled:picked,onclick:()=>{
-      r.picked=k; const ok=k===q.correct; if(ok) r.score++; r.log.push({id,ok}); S.quiz[t.id+':'+id]=ok; save(); drawQuiz(t); }},
+      r.picked=k; const ok=k===q.correct; if(ok) r.score++; r.log.push({id,ok}); S.quiz[qk(t,id)]=ok; save(); drawQuiz(t); }},
       h('span',{class:'ltr','aria-hidden':'true'},'ABCD'[k]),
       h('span',null,picked&&isC?h('span',{class:'res'},'Correct answer'):null,picked&&isP&&!isC?h('span',{class:'res'},'Your answer, not correct'):null,o));
   });
@@ -827,7 +831,7 @@ function progressV(){
     const hasPlan=t.units.some(u=>u.plan);
     add(main,h('h2',null,t.name));
     const rows=t.units.map(u=>{
-      const qs=t.quiz.map((q,i)=>[q,i]).filter(([q])=>q.unit===u.id), att=qs.filter(([q,i])=>t.id+':'+i in S.quiz), ok=att.filter(([q,i])=>S.quiz[t.id+':'+i]).length;
+      const qs=t.quiz.map((q,i)=>[q,i]).filter(([q])=>q.unit===u.id), att=qs.filter(([q,i])=>qk(t,i) in S.quiz), ok=att.filter(([q,i])=>S.quiz[qk(t,i)]).length;
       const deck=deckFor(t,u.id), kn=deck.filter(c=>S.cards[c.key]).length;
       const es=S.essay[t.id+':'+u.id];
       return h('tr',null,
@@ -843,7 +847,7 @@ function progressV(){
       add(main,h('h3',null,'Past paper'));
       add(main,h('div',{class:'tablewrap'},h('table',null,h('thead',null,h('tr',null,['Question','Mark','Status'].map(x=>h('th',{scope:'col'},x)))),h('tbody',null,t.past.map(q=>{const r=S.past[t.id+':'+q.id];return h('tr',null,h('td',null,`${q.paper}, Q${q.label} ${q.sub}`),h('td',null,r?`${r.score} out of ${r.max}`:'Not tried'),h('td',null,r?stEl(pct(r.score,r.max)):'-'));})))));
     }
-    const wrong=t.quiz.map((q,i)=>[q,i]).filter(([q,i])=>S.quiz[t.id+':'+i]===false);
+    const wrong=t.quiz.map((q,i)=>[q,i]).filter(([q,i])=>S.quiz[qk(t,i)]===false);
     if(wrong.length){ add(main,h('h3',null,'Quiz questions to look at again'),h('ul',null,wrong.map(([q])=>h('li',null,q.q+' ',h('a',{href:`#/t/${t.id}/learn/${q.unit}`},'Revise')))));}
   });
   const b=h('button',{class:'btn alt',onclick:()=>{ if(resetStage===0){resetStage=1;b.textContent='Tap again to delete all my progress';} else { resetStage=0; S={revised:{},cards:{},quiz:{},essay:{},past:{},drafts:{},prefs:S.prefs}; save(); PS=null; PSid=null; render(); } }},'Reset my progress');
