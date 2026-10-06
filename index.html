@@ -11,6 +11,7 @@
   --brown:#5C3A1E; --green:#1F5C36; --purple:#5B3A8C; --bad:#8B1A1A; --cream-on-navy:#FFF8E7;
   --fs:17px;
 }
+:root[data-theme="pink"]{ --bg:#FDEEF3; --card:#FADCE7; --border:#D98BA8; --sub:#EBA3BE; }
 :root[data-theme="blue"]{ --bg:#EAF2FA; --card:#D9E8F7; --border:#7FA3C9; --sub:#8FB8E0; }
 *{box-sizing:border-box}
 html{font-size:var(--fs)}
@@ -154,7 +155,7 @@ main h5{font-size:.98rem;margin:.9em 0 .2em;color:var(--navy)}
 nav.side a.acctlink{flex-direction:column;align-items:flex-start;gap:2px}
 .overall{padding:.6rem .75rem;margin:.25rem 0 .75rem;background:var(--card);border:2px solid var(--border);border-radius:10px;font-size:.9rem}
 .overall .ovtop{display:flex;justify-content:space-between;margin-bottom:.35rem}
-.overall .ovbar{height:14px;border-radius:7px;background:#fff8e7;border:2px solid var(--border);overflow:hidden}
+.overall .ovbar{height:14px;border-radius:7px;background:var(--bg);border:2px solid var(--border);overflow:hidden}
 .overall .ovfill{height:100%;background:var(--green);transition:width .4s ease}
 .overall small{display:block;margin-top:.35rem;font-size:.78rem}
 @media (prefers-reduced-motion:reduce){.overall .ovfill{transition:none}}
@@ -210,7 +211,7 @@ footer.foot{border-top:2px solid var(--border);padding:14px 18px;font-size:.82re
       <button id="fsUp" aria-label="Larger text">A+</button>
     </span>
     <label for="theme">Colour</label>
-    <select id="theme"><option value="cream">Cream</option><option value="blue">Pale blue</option></select>
+    <select id="theme"><option value="cream">Cream</option><option value="blue">Pale blue</option><option value="pink">Pink</option></select>
   </div>
 </header>
 <div class="subbar"></div>
